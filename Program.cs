@@ -31,4 +31,26 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next.Invoke();
+    }
+    catch (Exception ex)
+    {
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = ex.Message
+        });
+    }
+});
+
+app.UseCors("AllowAllOrigins"); // Middleware for CORS
+app.UseHttpsRedirection(); // Middleware for redirecting to HTTPS
+app.UseAuthorization(); // Middleware for handling Authorization
+app.MapControllers(); // Middleware for routing
+
+
 app.Run();
