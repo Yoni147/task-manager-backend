@@ -6,7 +6,7 @@ namespace TaskManagerAPI.Models
     {
 
         private string _title = "Untitled Task";
-        private string _description = "Untitled Task";
+        private string _description = "No Description";
 
         public int Id { get; set; }
 

@@ -1,54 +1,69 @@
 using Microsoft.AspNetCore.Mvc;
 using TaskManagerAPI.Models;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace TaskManagerAPI.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/tasks")]
     [ApiController]
     public class TasksController : ControllerBase
     {
-        private static List<TaskItem> tasks = new List<TaskItem>
-        {
-            new TaskItem { Id = 1, Title = "משימה ראשונה", Description = "תיאור משימה", Status = false },
-            new TaskItem { Id = 2, Title = "משימה שנייה", Description = "תיאור נוסף", Status = true },
-            new TaskItem { Id = 3, Title = "", Description = " תיאור נוסף ביותר", Status = true },
-            new TaskItem { Id = 4, Title = "משימה רביעית", Description = "", Status = true }
-        };
+        private readonly AppDbContext _context;
 
-        // GET: api/tasks
-        [HttpGet]
-        public IActionResult GetAllTasks([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        // Constructor to inject AppDbContext
+        public TasksController(AppDbContext context)
         {
-            var pagedTasks = tasks
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+            _context = context;
+        }
+
+        // POST: api/tasks
+        [HttpPost("")]
+        public IActionResult GetAllTasksWithPaginationAndSearch([FromBody] PaginationSearchRequest request)
+        {
+            // Validate request parameters
+            if (request.Page < 1 || request.PageSize < 1)
+            {
+                return BadRequest(new { error = "Invalid request parameters" });
+            }
+
+            // Perform search and pagination
+            var filteredTasks = string.IsNullOrWhiteSpace(request.SearchQuery)
+                ? _context.Tasks.ToList()
+                : _context.Tasks
+                    .Where(t =>
+                        t.Title.Contains(request.SearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                        t.Description.Contains(request.SearchQuery, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            var pagedTasks = filteredTasks
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
                 .ToList();
 
             return Ok(new
             {
-                TotalItems = tasks.Count,
-                Page = page,
-                PageSize = pageSize,
-                Tasks = pagedTasks
+                tasks = pagedTasks,
+                total = filteredTasks.Count
             });
         }
 
-        // GET: api/tasks/{id}
-        [HttpGet("{id}")]
-        public IActionResult GetTaskById(int id)
+        // POST: api/tasks/details
+        [HttpPost("details")]
+        public IActionResult GetTaskById([FromBody] TaskIdRequest request)
         {
-            var task = tasks.FirstOrDefault(t => t.Id == id);
+            // Find task by ID
+            var task = _context.Tasks.FirstOrDefault(t => t.Id == request.Id);
+
             if (task == null)
             {
-                return NotFound(new { Message = "המשימה לא נמצאה" });
+                return NotFound(new { error = "Task not found" });
             }
+
             return Ok(task);
         }
 
-        // POST: api/tasks
-        [HttpPost]
+        // POST: api/tasks/create
+        [HttpPost("create")]
         public IActionResult CreateTask([FromBody] TaskItem task)
         {
             if (!ModelState.IsValid)
@@ -58,33 +73,38 @@ namespace TaskManagerAPI.Controllers
 
             if (string.IsNullOrEmpty(task.Title) || task.Title.Length < 3 || task.Title.Length > 50)
             {
-                return BadRequest(new { Message = "כותרת המשימה חייבת להיות בין 3 ל-50 תווים." });
+                return BadRequest(new { Message = "Task title must be between 3 and 50 characters." });
             }
 
-            task.Id = tasks.Count > 0 ? tasks.Max(t => t.Id) + 1 : 1;
-            tasks.Add(task);
+            _context.Tasks.Add(task);
+            _context.SaveChanges();
+
             return CreatedAtAction(nameof(GetTaskById), new { id = task.Id }, task);
         }
 
         // PUT: api/tasks/{id}
         [HttpPut("{id}")]
-        public IActionResult UpdateTask(int id, [FromBody] TaskItem updatedTask)
+        public IActionResult UpdateTask(int id, [FromBody] TaskItem request)
         {
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            var task = tasks.FirstOrDefault(t => t.Id == id);
+            // Find the task
+            var task = _context.Tasks.FirstOrDefault(t => t.Id == id);
             if (task == null)
             {
-                return NotFound(new { Message = "המשימה לא נמצאה" });
+                return NotFound(new { error = "Task not found" });
             }
 
-            task.Title = updatedTask.Title;
-            task.Description = updatedTask.Description;
-            task.Status = updatedTask.Status;
+            // Update task fields
+            if (!string.IsNullOrWhiteSpace(request.Title))
+            {
+                task.Title = request.Title;
+            }
+            if (!string.IsNullOrWhiteSpace(request.Description))
+            {
+                task.Description = request.Description;
+            }
+            task.Status = request.Status;
+
+            _context.SaveChanges();
 
             return Ok(task);
         }
@@ -93,13 +113,15 @@ namespace TaskManagerAPI.Controllers
         [HttpDelete("{id}")]
         public IActionResult DeleteTask(int id)
         {
-            var task = tasks.FirstOrDefault(t => t.Id == id);
+            var task = _context.Tasks.FirstOrDefault(t => t.Id == id);
             if (task == null)
             {
-                return NotFound(new { Message = "המשימה לא נמצאה" });
+                return NotFound(new { Message = "Task not found" });
             }
 
-            tasks.Remove(task);
+            _context.Tasks.Remove(task);
+            _context.SaveChanges();
+
             return NoContent();
         }
     }
