@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using TaskManagerAPI.Models;
 using TaskManagerAPI.Services;
 
@@ -7,7 +8,23 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    // Swagger configuration
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Task Manager API",
+        Version = "v1",
+        Description = "API for managing tasks with CRUD operations, pagination, and search."
+    });
+
+     // Include OpenAPI YAML file from task-manager-docs directory
+    var yamlPath = Path.Combine(Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? string.Empty, @"..\task-manager-docs\task-manager-api-v1.0.0.yaml");
+    if (File.Exists(yamlPath))
+    {
+        c.IncludeXmlComments(yamlPath); // Attach the YAML file
+    }
+});
 
 // Configure Entity Framework Core with In-Memory Database
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -38,8 +55,13 @@ app.UseCors("AllowAllOrigins");
 
 if (app.Environment.IsDevelopment())
 {
+    // Enable Swagger and Swagger UI
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Task Manager API v1");
+        c.RoutePrefix = string.Empty; // Access Swagger UI at the root URL
+    });
 }
 
 // Middleware for handling global errors
